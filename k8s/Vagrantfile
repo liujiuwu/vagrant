@@ -1,0 +1,71 @@
+# -*- mode: ruby -*-
+# vi: set ft=ruby :
+
+VAGRANTFILE_API_VERSION = "2"
+
+Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
+  config.vm.define "kuboard"  do |node|
+    name = "kuboard"
+    node.vm.box = "jiuwu/centos79_docker"
+    node.vm.hostname = name
+    node.vm.network "private_network", ip: "192.168.56.100"
+    node.vm.synced_folder "./data", "/vagrant", create: true, owner: "root", group: "root"
+    node.vm.provider "virtualbox" do |v|
+      v.check_guest_additions = false
+      v.gui = false
+      v.name = name
+      v.memory = 4096
+      v.cpus = 2
+    end
+    node.ssh.username = "root"
+    node.ssh.password = "vagrant"
+    node.vm.provision "file", source: "~/.ssh/id_rsa.pub", destination: "~/.ssh/authorized_keys"
+    node.ssh.private_key_path = ["~/.ssh/id_rsa", "~/.vagrant.d/insecure_private_key"]
+    node.ssh.forward_agent = true
+    node.ssh.insert_key = false
+  end
+
+  config.vm.define "k8s-master"  do |node|
+    name = "k8s-master"
+    node.vm.box = "jiuwu/centos79"
+    node.vm.hostname = name
+    node.vm.network "private_network", ip: "192.168.56.200"
+    node.vm.synced_folder "./data", "/vagrant", create: true, owner: "root", group: "root"
+    node.vm.provider "virtualbox" do |v|
+        v.check_guest_additions = false
+        v.gui = false
+        v.name = name
+        v.memory = 4096
+        v.cpus = 2
+    end
+    node.ssh.username = "root"
+    node.ssh.password = "vagrant"
+    node.vm.provision "file", source: "~/.ssh/id_rsa.pub", destination: "~/.ssh/authorized_keys"
+    node.ssh.private_key_path = ["~/.ssh/id_rsa", "~/.vagrant.d/insecure_private_key"]
+    node.ssh.forward_agent = true
+    node.ssh.insert_key = false
+  end
+
+  (1..2).each do |i|
+    config.vm.define "k8s-worker-0#{i}"  do |node|
+      name = "k8s-worker-0#{i}"
+      node.vm.box = "jiuwu/centos79"
+      node.vm.hostname = name
+      node.vm.network "private_network", ip: "192.168.56.20#{i}"
+      node.vm.synced_folder "./data", "/vagrant", create: true, owner: "root", group: "root"
+      node.vm.provider "virtualbox" do |v|
+        v.check_guest_additions = false
+        v.gui = false
+        v.name = name
+        v.memory = 8192
+        v.cpus = 4
+      end
+      node.ssh.username = "root"
+    node.ssh.password = "vagrant"
+    node.vm.provision "file", source: "~/.ssh/id_rsa.pub", destination: "~/.ssh/authorized_keys"
+    node.ssh.private_key_path = ["~/.ssh/id_rsa", "~/.vagrant.d/insecure_private_key"]
+    node.ssh.forward_agent = true
+    node.ssh.insert_key = false
+    end
+  end
+end

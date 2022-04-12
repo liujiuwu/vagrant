@@ -1,0 +1,27 @@
+# -*- mode: ruby -*-
+# vi: set ft=ruby :
+
+VAGRANTFILE_API_VERSION = "2"
+
+Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
+  config.vm.define "ubuntu01"  do |node|
+    name = "ubuntu01"
+    node.vm.box = "hashicorp/bionic64"
+    node.vm.hostname = name
+    node.vm.network "private_network", ip: "192.168.56.100"
+    node.vm.synced_folder "./data", "/vagrant", create: true, owner: "root", group: "root"
+    node.vm.provider "virtualbox" do |v|
+        v.check_guest_additions = false
+        v.gui = false
+        v.name = name
+        v.memory = 4096
+        v.cpus = 2
+    end
+    #node.ssh.username = "root"
+    #node.ssh.password = "vagrant"
+    #node.vm.provision "file", source: "~/.ssh/id_rsa.pub", destination: "~/.ssh/authorized_keys"
+    #node.ssh.private_key_path = ["~/.ssh/id_rsa", "~/.vagrant.d/insecure_private_key"]
+    #node.ssh.forward_agent = true
+    #node.ssh.insert_key = false
+  end
+end

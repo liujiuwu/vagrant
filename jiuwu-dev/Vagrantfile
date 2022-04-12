@@ -1,0 +1,31 @@
+# -*- mode: ruby -*-
+# vi: set ft=ruby :
+
+Vagrant.configure("2") do |config|
+  config.vm.box = "jiuwu-dev"
+  config.vm.network "forwarded_port", guest: 3306, host: 13306
+  config.vm.network "forwarded_port", guest: 6379, host: 16379
+  config.vm.network "forwarded_port", guest: 8848, host: 18848
+
+  config.vm.hostname = "jiuwu-dev"
+  config.vm.network :private_network, ip: "192.168.56.8"
+
+
+
+   #虚拟机的相关配置，根据需要调整
+  config.vm.provider "virtualbox" do |v|
+    v.check_guest_additions = false
+    v.gui = false
+    v.name = "jiuwu-dev"
+    v.memory = 4096
+    v.cpus = 2    
+  end
+
+  #安装vagrant-timezone插件
+  #vagrant plugin install vagrant-timezone
+  if Vagrant.has_plugin?("vagrant-timezone")
+    config.timezone.value = "Asia/Shanghai"
+  end
+
+  config.vm.provision "shell", inline: "docker restart mysql;docker restart redis;docker restart nacos", privileged: false
+end

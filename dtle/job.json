@@ -1,0 +1,42 @@
+{
+  "Job": {
+    "ID": "dtle-demo",
+    "Datacenters": ["dc1"],
+    "TaskGroups": [{
+        "Name": "src",
+        "Tasks": [{
+          "Name": "src",
+          "Driver": "dtle",
+          "Config": {
+            "Gtid": "",
+            "ReplicateDoDb": [{
+              "TableSchema": "demo",
+              "Tables": [{
+                "TableName": "demo_tbl"
+              }]
+            }],
+            "ConnectionConfig": {
+              "Host": "mysql-src",
+              "Port": 3306,
+              "User": "root",
+              "Password": "pass"
+            }
+          }
+        }]
+      }, {
+        "Name": "dest",
+        "Tasks": [{
+          "Name": "dest",
+          "Driver": "dtle",
+          "Config": {
+            "ConnectionConfig": {
+              "Host": "mysql-dst",
+              "Port": 3306,
+              "User": "root",
+              "Password": "pass"
+            }
+          }
+        }]
+    }]
+  }
+}

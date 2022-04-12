@@ -1,0 +1,81 @@
+# -*- mode: ruby -*-
+# vi: set ft=ruby :
+
+$shellscript = <<-SCRIPT
+echo "创建mysql挂载目录"
+mkdir -p ~/docker_data/{mysql1,mysql2}/{conf,data}
+
+echo "生成mysql的my.cnf配置文件，可以根据自己的需要修改"
+
+echo "
+[mysqld]
+#数据库默认字符集,主流字符集支持一些特殊表情符号（特殊表情符占用4个字节）
+character-set-server = utf8mb4
+#数据库字符集对应一些排序等规则，注意要和character-set-server对应
+collation-server = utf8mb4_general_ci
+default-time-zone = '+08:00'
+#设置client连接mysql时的字符集,防止乱码
+init_connect='SET NAMES utf8mb4'
+#是否对sql语句大小写敏感，1表示不敏感
+lower_case_table_names = 1
+#最大连接数
+max_connections = 400
+#最大错误连接数
+max_connect_errors = 1000
+#慢查询sql日志设置
+slow_query_log = 1
+slow_query_log_file = slow.log
+" | tee ~/docker_data/mysql1/conf/my.cnf ~/docker_data/mysql2/conf/my.cnf
+
+SCRIPT
+
+$netshellscript = <<-SCRIPT
+DTLE_NETWORK=`docker network ls|grep dtle-net|wc -l`
+
+if [ $DTLE_NETWORK -lt 1 ];then
+echo "create dtle-net network"
+docker network create dtle-net
+fi
+SCRIPT
+
+Vagrant.configure("2") do |config|
+  config.vm.define "dtle01"  do |node|
+    name = "dtle01"
+    node.vm.box = "ubuntu/bionic64"
+    node.vm.hostname = name
+  
+    node.vm.network :private_network, ip: "192.168.56.15"
+    
+    node.vm.provider "virtualbox" do |v|
+        v.check_guest_additions = false
+        v.gui = false
+        v.name = name
+        v.memory = 4096
+        v.cpus = 2
+    end
+
+    if Vagrant.has_plugin?("vagrant-timezone")
+      node.timezone.value = "Asia/Shanghai"
+    end
+
+    #安装docker
+    node.vm.provision :docker do |doc|    
+    end
+
+    node.vm.provision "shell", inline: $shellscript, privileged: false
+
+    #创建网络
+    node.vm.provision "shell", inline: $netshellscript, privileged: false
+
+    node.vm.provision :docker do |doc|         
+      doc.run "mysql-src", image: "mysql:5.7", args: "-e MYSQL_ROOT_PASSWORD=pass -p 33061:3306 -v /vagrant/data:/docker-entrypoint-initdb.d -v /home/vagrant/docker_data/mysql1/conf:/etc/mysql/conf.d -v /home/vagrant/docker_data/mysql1/data:/var/lib/mysql --network=dtle-net -e MYSQL_DATABASE=demo -e TZ=Asia/Shanghai", cmd: "mysqld --gtid-mode=ON --enforce-gtid-consistency=1 --log-bin=bin --server-id=1"
+      
+      #可以不用创建目标库，dtle会自动创建，后面的server-id参数绝对不能相同
+      doc.run "mysql-dst", image: "mysql:5.7", args: "-e MYSQL_ROOT_PASSWORD=pass -p 33062:3306 -v /home/vagrant/docker_data/mysql2/conf:/etc/mysql/conf.d -v /home/vagrant/docker_data/mysql2/data:/var/lib/mysql --network=dtle-net -e TZ=Asia/Shanghai", cmd: "mysqld --gtid-mode=ON --enforce-gtid-consistency=1 --log-bin=bin --server-id=2"
+
+      doc.run "dtle-consul", image: "consul:latest", args: "-p 8500:8500 --network=dtle-net"
+      doc.run "dtle", image: "actiontech/dtle", args: "-p 4646:4646 --network=dtle-net"
+    end
+
+  end
+end

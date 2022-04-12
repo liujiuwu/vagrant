@@ -1,0 +1,98 @@
+# -*- mode: ruby -*-
+# vi: set ft=ruby :
+
+$shellscript = <<-SCRIPT
+echo "创建mysql、redis、mongo挂载目录"
+mkdir -p ~/docker_data/{mysql,redis,mongo}/{conf,data}
+
+echo "生成mysql的my.cnf配置文件，可以根据自己的需要修改"
+
+echo "
+[mysqld]
+#数据库默认字符集,主流字符集支持一些特殊表情符号（特殊表情符占用4个字节）
+character-set-server = utf8mb4
+
+#数据库字符集对应一些排序等规则，注意要和character-set-server对应
+collation-server = utf8mb4_general_ci
+
+default-time-zone = '+08:00'
+
+#设置client连接mysql时的字符集,防止乱码
+init_connect='SET NAMES utf8mb4'
+
+#是否对sql语句大小写敏感，1表示不敏感
+lower_case_table_names = 1
+
+#最大连接数
+max_connections = 400
+#最大错误连接数
+max_connect_errors = 1000
+
+#慢查询sql日志设置
+slow_query_log = 1
+slow_query_log_file = slow.log
+" > ~/docker_data/mysql/conf/my.cnf
+
+echo "生成redis的redis.conf配置文件，可以根据自己的需要修改"
+
+echo "
+requirepass 123456
+appendonly yes
+" > ~/docker_data/redis/conf/redis.conf
+
+echo "生成mongo的mongod.conf配置文件，可以根据自己的需要修改"
+
+#mognodb.conf是yaml格式，不能为空
+echo "
+storage:
+  dbPath: /data/db
+" > ~/docker_data/mongo/conf/mongod.conf
+
+
+SCRIPT
+
+Vagrant.configure("2") do |config|
+  #配置dev01主机环境
+  config.vm.define "dev01"  do |node|
+    name = "dev01"
+    node.vm.box = "ubuntu/bionic64"
+    node.vm.hostname = name
+    
+    #转发了主机端口，可以直接使用localhost访问或使用私有网络静态ip访问
+    node.vm.network "forwarded_port", guest: 3306, host: 3306
+    node.vm.network "forwarded_port", guest: 6379, host: 6379
+    node.vm.network "forwarded_port", guest: 27017, host: 27017
+    node.vm.network "forwarded_port", guest: 8848, host: 8848
+    
+    #私有网络静态ip，virtualbox网段配置的是192.168.56.0/24，因此这里配置的ip只能在这个范围内
+    node.vm.network :private_network, ip: "192.168.56.5"
+    
+    #虚拟机的相关配置，根据需要调整
+    node.vm.provider "virtualbox" do |v|
+        v.check_guest_additions = false
+        v.gui = false
+        v.name = name
+        v.memory = 4096
+        v.cpus = 2
+    end
+
+    #安装vagrant-timezone插件
+    #vagrant plugin install vagrant-timezone
+    if Vagrant.has_plugin?("vagrant-timezone")
+      node.timezone.value = "Asia/Shanghai"
+    end
+
+    #这里privileged一定要设置为false，这样会以当前登录用户(vagrant)来执行脚本，否则会以root用户执行脚本，那脚本创建的目录对当前用户就没有权限了
+    node.vm.provision "shell", inline: $shellscript, privileged: false
+
+    node.vm.provision :docker do |doc|         
+      doc.run "mysql", image: "mysql:5.7", args: "--restart=always -p 3306:3306 -v /vagrant/data:/docker-entrypoint-initdb.d -v /home/vagrant/docker_data/mysql/conf:/etc/mysql/conf.d -v /home/vagrant/docker_data/mysql/data:/var/lib/mysql -e MYSQL_ROOT_PASSWORD=123456 -e MYSQL_DATABASE=nacos -e TZ=Asia/Shanghai"   
+      
+      doc.run "nacos", image: "nacos/nacos-server:v2.0.4", args: "--restart=always -p 8848:8848 -e MODE=standalone -e MYSQL_SERVICE_HOST=localhost -e MYSQL_SERVICE_DB_NAME=nacos -e MYSQL_SERVICE_USER=root -e MYSQL_SERVICE_PASSWORD=123456"
+
+      doc.run "redis", image: "redis:6", args: "--restart=always -p 6379:6379 -v /home/vagrant/docker_data/redis/conf:/usr/local/etc/redis -v /home/vagrant/docker_data/redis/data:/data", cmd: "redis-server /usr/local/etc/redis/redis.conf"
+
+      doc.run "mongo", image: "mongo:5.0.6", args: "--restart=always -p 27017:27017 -v /home/vagrant/docker_data/mongo/conf:/etc/mongo -v /home/vagrant/docker_data/mongo/data:/data/db -e MONGO_INITDB_ROOT_USERNAME=root -e MONGO_INITDB_ROOT_PASSWORD=123456", cmd: "mongod --auth --config /etc/mongo/mongod.conf"
+    end
+  end
+end
